@@ -60,6 +60,8 @@ from utils.speed_estimation import (
 )
 from modules.evaluation.evaluate import plot_absolute_error
 
+import line_profiler
+
 config = configparser.ConfigParser()
 config.read("config.ini")
 
@@ -77,7 +79,7 @@ OBJECT_DETECTION_MIN_CONFIDENCE_SCORE = config.getfloat(
     "tracker", "object_detection_min_confidence_score"
 )
 
-
+# @line_profiler.profile
 def run(
     path_to_video: str,
     data_dir: str,
@@ -183,6 +185,7 @@ def run(
 
         # for shake_detection
         if shake_detection.is_hard_move(frame):
+            print("FRAME MOVED")
             logging.info(
                 "Run No.: %s, Video: %s, Hard Move Detected Frame: %d",
                 str(run_id),
@@ -335,7 +338,7 @@ def run(
                             car.direction = calculate_car_direction(car)
                             car_first_box = car.tracked_boxes[0]
                             car_last_box = car.tracked_boxes[-1]
-                            meters_moved = geo_model.get_distance_from_camera_points(
+                            meters_moved = geo_model.get_distance_from_camera_points( # dist in meters
                                 CameraPoint(
                                     car_first_box.frame_count,
                                     car_first_box.center_x,
@@ -347,22 +350,23 @@ def run(
                                     car_last_box.center_y,
                                 ),
                             )
-                            if meters_moved <= 6:
+                            if meters_moved <= 2:
                                 continue
-
-                            if car.direction == Direction.TOWARDS:
-                                car_count_towards += 1
-                                total_speed_towards += (meters_moved) / (
+                            
+                            car_speed = (meters_moved) / (
                                     car.frames_seen / fps
                                 )
+                            print("Putting ", car_speed*2.237)
+                            frame = cv2.putText(frame, f"{car_speed*2.237:.1f} mph", (car.tracked_boxes[0].center_x,car.tracked_boxes[0].center_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 1)
+                            if car.direction == Direction.TOWARDS:
+                                car_count_towards += 1
+                                total_speed_towards += car_speed
                                 total_speed_meta_appr_towards += (
                                     AVG_FRAME_COUNT / int(car.frames_seen)
                                 ) * SPEED_LIMIT
                             else:
                                 car_count_away += 1
-                                total_speed_away += (meters_moved) / (
-                                    car.frames_seen / fps
-                                )
+                                total_speed_away += car_speed
                                 total_speed_meta_appr_away += (
                                     AVG_FRAME_COUNT / int(car.frames_seen)
                                 ) * SPEED_LIMIT
@@ -417,7 +421,7 @@ def run(
 
         if enable_visual:
             cv2.imshow("farsec", frame)
-            cv2.waitKey(1000)
+            cv2.waitKey(1)
         else:
             cv2.imwrite("frames_detected/frame_after_detection.jpg", frame)
 
@@ -482,7 +486,7 @@ if __name__ == "__main__":
         "--enable_visual",
         nargs="?",
         help="Enable visual output.",
-        default=False,
+        default=True,
     )
     args = parser.parse_args()
 
